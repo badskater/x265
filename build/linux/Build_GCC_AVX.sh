@@ -36,3 +36,6 @@ ADDLIB libx265_main12.a
 SAVE
 END
 EOF
+
+# install the CLI, combined libx265.a, and headers (default prefix /usr/local)
+sudo make install

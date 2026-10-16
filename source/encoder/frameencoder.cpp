@@ -283,7 +283,7 @@ bool FrameEncoder::startCompressFrame(Frame* curFrame[MAX_LAYERS])
         curFrame[layer]->m_encData->m_jobProvider = this;
         curFrame[layer]->m_encData->m_slice->m_mref = m_mref;
     }
-    m_sliceType.set(curFrame[0]->m_lowres.sliceType);
+    m_sliceType = curFrame[0]->m_lowres.sliceType;
 
     if (!m_cuGeoms)
     {
@@ -760,6 +760,11 @@ void FrameEncoder::compressFrame(int layer)
         }
     }
 
+    /* In single SEI NAL mode the SEI messages of this access unit are collected in m_bs, which still holds the
+     * previous picture's slice header unless the AUD or the repeated stream headers above have reset it */
+    if (m_param->bSingleSeiNal && !(m_frame[layer]->m_lowres.bKeyframe && m_param->bRepeatHeaders))
+        m_bs.resetBits();
+
     m_rce.encodeOrder = m_frame[layer]->m_encodeOrder;
     int prevBPSEI = m_rce.encodeOrder ? m_top->m_lastBPSEI : 0;
 
@@ -804,19 +809,18 @@ void FrameEncoder::compressFrame(int layer)
         {
             if (m_param->interlaceMode > 0)
             {
+                // field_seq_flag is 1, so each picture is a single field: 1 = top field, 2 = bottom field
                 if( m_param->interlaceMode == 2 )
-                {   
-                    // m_picStruct should be set to 3 or 4 when field feature is enabled
+                {
                     if (m_param->bField)
-                        // 3: Top field, bottom field, in that order; 4: Bottom field, top field, in that order
-                        sei->m_picStruct = (slice->m_fieldNum == 1) ? 4 : 3;
+                        sei->m_picStruct = (slice->m_fieldNum == 1) ? 2 /* bottom */ : 1 /* top */;
                     else
                         sei->m_picStruct = (poc & 1) ? 1 /* top */ : 2 /* bottom */;
                 }     
                 else if (m_param->interlaceMode == 1)
                 {
                     if (m_param->bField)
-                        sei->m_picStruct = (slice->m_fieldNum == 1) ? 3: 4;
+                        sei->m_picStruct = (slice->m_fieldNum == 1) ? 1 /* top */ : 2 /* bottom */;
                     else
                         sei->m_picStruct = (poc & 1) ? 2 /* bottom */ : 1 /* top */;
                 }

@@ -761,7 +761,6 @@ int Encoder::setAnalysisDataAfterZScan(x265_analysis_data *analysis_data, Frame*
                 memcpy(&(intraData)->depth[cuPos], &(srcIntraData)->depth[mbIndex * 16], 16);
                 memcpy(&(intraData)->chromaModes[cuPos], &(srcIntraData)->chromaModes[mbIndex * 16], 16);
                 memcpy(&(intraData)->partSizes[cuPos], &(srcIntraData)->partSizes[mbIndex * 16], 16);
-                memcpy(&(intraData)->partSizes[cuPos], &(srcIntraData)->partSizes[mbIndex * 16], 16);
             }
         }
         memcpy(&(intraData)->modes, (srcIntraData)->modes, curFrame->m_analysisData.numPartitions * analysis_data->numCUsInFrame);
@@ -857,7 +856,6 @@ int Encoder::setAnalysisData(x265_analysis_data *analysis_data, int poc, uint32_
                     int bytes = curFrame->m_analysisData.numPartitions >> ((intraData)->depth[d] * 2);
                     memset(&(currIntraData)->depth[count], (intraData)->depth[d], bytes);
                     memset(&(currIntraData)->chromaModes[count], (intraData)->chromaModes[d], bytes);
-                    memset(&(currIntraData)->partSizes[count], (intraData)->partSizes[d], bytes);
                     memset(&(currIntraData)->partSizes[count], (intraData)->partSizes[d], bytes);
                     count += bytes;
                 }
@@ -2556,11 +2554,11 @@ int Encoder::encode(const x265_picture* pic_in, x265_picture* pic_out)
                     slice->m_bUseSao = curEncoder->m_frameFilter.m_useSao = 0;
                 }
             }
-            if (m_param->rc.rateControlMode != X265_RC_CQP)
-                m_lookahead->getEstimatedPictureCost(frameEnc[0]);
-
             if (m_param->bIntraRefresh)
                  calcRefreshInterval(frameEnc[0]);
+
+            if (m_param->rc.rateControlMode != X265_RC_CQP)
+                m_lookahead->getEstimatedPictureCost(frameEnc[0]);
 
             // Generate MCSTF References and perform HME
             if (m_param->bEnableTemporalFilter && isFilterThisframe(frameEnc[0]->m_mcstf->m_sliceTypeConfig, frameEnc[0]->m_lowres.sliceType))

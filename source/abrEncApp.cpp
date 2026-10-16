@@ -830,12 +830,13 @@ ret:
 
                             if (pic_in[view]->framesize)
                             {
+                                bool bBff = m_param->interlaceMode == 2;
                                 for (int i = 0; i < x265_cli_csps[pic_in[view]->colorSpace].planes; i++)
                                 {
-                                    char* srcP1 = (char*)pic_in[view]->planes[i];
-                                    char* srcP2 = (char*)pic_in[view]->planes[i] + pic_in[view]->stride[i];
-                                    char* p1 = (char*)picField1.planes[i];
-                                    char* p2 = (char*)picField2.planes[i];
+                                    char* srcP1 = static_cast<char*>(pic_in[view]->planes[i]) + (bBff ? pic_in[view]->stride[i] : 0);
+                                    char* srcP2 = static_cast<char*>(pic_in[view]->planes[i]) + (bBff ? 0 : pic_in[view]->stride[i]);
+                                    char* p1 = static_cast<char*>(picField1.planes[i]);
+                                    char* p2 = static_cast<char*>(picField2.planes[i]);
 
                                     int stride = picField1.stride[i];
 
@@ -883,13 +884,28 @@ ret:
 
                     if (m_foveaGazeFileFP)
                     {
-                        /* Try to read gaze for this frame; reuse previous on failure */
+                        /* Try to read gaze for this frame; reuse previous on failure.
+                         * The frame number lets the gaze track resynchronize with the
+                         * video (e.g. after --seek, or if the track has gaps): entries
+                         * behind the current frame are stale and dropped, and an entry
+                         * for a future frame is pushed back until its frame arrives. */
                         int frameNum;
                         float fx, fy;
-                        if (fscanf(m_foveaGazeFileFP, "%d %f %f", &frameNum, &fx, &fy) == 3)
+                        int curFrame = (int)(m_cliopt.seek + inFrameCount) - 1;
+                        long linePos;
+                        while ((linePos = ftell(m_foveaGazeFileFP)),
+                               fscanf(m_foveaGazeFileFP, "%d %f %f", &frameNum, &fx, &fy) == 3)
                         {
-                            gazeX = fx;
-                            gazeY = fy;
+                            if (frameNum < curFrame)
+                                continue;
+                            if (frameNum > curFrame)
+                                fseek(m_foveaGazeFileFP, linePos, SEEK_SET);
+                            else
+                            {
+                                gazeX = fx;
+                                gazeY = fy;
+                            }
+                            break;
                         }
                     }
                     else
@@ -955,8 +971,11 @@ ret:
                     int numEncoded = api->encoder_encode(m_encoder, &p_nal, &nal, picInput, pic_recon);
 
                     int idx = (inFrameCount - 1) % m_parent->m_queueSize;
-                    m_parent->m_picIdxReadCnt[m_id][idx].incr();
-                    m_parent->m_picReadCnt[m_id].incr();
+                    if (inputNum == inputPicNum - 1)
+                    {
+                        m_parent->m_picIdxReadCnt[m_id][idx].incr();
+                        m_parent->m_picReadCnt[m_id].incr();
+                    }
                     if (m_cliopt.loadLevel && picInput)
                     {
                         m_parent->m_analysisReadCnt[m_cliopt.refId].incr();

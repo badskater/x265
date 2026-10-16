@@ -72,6 +72,7 @@
 #define NUM_INTRA_MODE 35
 
 #if defined(__GNUC__)
+#define X265_ASSUME_NO_ALIAS __restrict__
 #define ALIGN_VAR_4(T, var)  T var __attribute__((aligned(4)))
 #define ALIGN_VAR_8(T, var)  T var __attribute__((aligned(8)))
 #define ALIGN_VAR_16(T, var) T var __attribute__((aligned(16)))
@@ -83,6 +84,7 @@
 #endif
 #elif defined(_MSC_VER)
 
+#define X265_ASSUME_NO_ALIAS
 #define ALIGN_VAR_4(T, var)  __declspec(align(4)) T var
 #define ALIGN_VAR_8(T, var)  __declspec(align(8)) T var
 #define ALIGN_VAR_16(T, var) __declspec(align(16)) T var
@@ -90,6 +92,8 @@
 #define ALIGN_VAR_64(T, var) __declspec(align(64)) T var
 #define fseeko _fseeki64
 #define ftello _ftelli64
+#else
+#define X265_ASSUME_NO_ALIAS
 #endif // if defined(__GNUC__)
 #if HAVE_INT_TYPES_H
 #define __STDC_FORMAT_MACROS
@@ -233,7 +237,7 @@ typedef int16_t  coeff_t;      // transform coefficient
 #define X265_LOWRES_CU_SIZE   8
 #define X265_LOWRES_CU_BITS   3
 
-#define X265_MALLOC(type, count)    (type*)x265_malloc(sizeof(type) * (count))
+#define X265_MALLOC(type, count)    static_cast<type*>(x265_malloc(sizeof(type) * (count)))
 #define X265_FREE(ptr)              x265_free(ptr)
 #define X265_FREE_ZERO(ptr)         { x265_free(ptr); (ptr) = NULL; }
 #define CHECKED_MALLOC(var, type, count) \

@@ -427,6 +427,7 @@ void x265_param_default(x265_param* param)
 
     /* SEI messages */
     param->preferredTransferCharacteristics = -1;
+    param->framePacking = -1;
     param->pictureStructure = -1;
     param->bEmitCLL = 1;
 
@@ -1058,7 +1059,7 @@ int x265_param_parse(x265_param* p, const char* name, const char* value)
         else
         {
             float fps = (float)atof(value);
-            if (fps > 0 && fps <= INT_MAX / 1000)
+            if (fps > 0 && fps <= INT_MAX / 1000 && ceilf(fps) != floorf(fps))
             {
                 p->fpsNum = (int)(fps * 1000 + .5);
                 p->fpsDenom = 1000;
@@ -1526,6 +1527,7 @@ int x265_param_parse(x265_param* p, const char* name, const char* value)
         OPT("dynamic-refine") p->bDynamicRefine = atobool(value);
         OPT("single-sei") p->bSingleSeiNal = atobool(value);
         OPT("atc-sei") p->preferredTransferCharacteristics = atoi(value);
+        OPT("frame-packing") p->framePacking = atoi(value);
         OPT("pic-struct") p->pictureStructure = atoi(value);
         OPT("chunk-start") p->chunkStart = atoi(value);
         OPT("chunk-end") p->chunkEnd = atoi(value);
@@ -2070,11 +2072,6 @@ int x265_check_params(x265_param* param)
         if (param->dolbyProfile == 81)
             CHECK(param->masteringDisplayColorVolume[0] == 0, "Dolby Vision profile - 8.1 requires Mastering display color volume information\n");
     }
-    if (param->bField && param->interlaceMode)
-    {
-        CHECK( (param->bFrameAdaptive==0), "Adaptive B-frame decision method should be closed for field feature.\n" );
-        // to do
-    }
     CHECK(param->selectiveSAO < 0 || param->selectiveSAO > 4,
         "Invalid SAO tune level. Value must be between 0 and 4 (inclusive)");
     if (param->bEnableSceneCutAwareQp)
@@ -2132,6 +2129,7 @@ int x265_check_params(x265_param* param)
                      || param->bEmitIDRRecoverySEI
                    || !!param->interlaceMode
                      || param->preferredTransferCharacteristics > 1
+                     || param->framePacking > -1
                      || strlen(param->toneMapFile)
                      || strlen(param->naluFile));
 
@@ -2140,6 +2138,10 @@ int x265_check_params(x265_param* param)
         param->bSingleSeiNal = 0;
         x265_log(param, X265_LOG_WARNING, "None of the SEI messages are enabled. Disabling Single SEI NAL\n");
     }
+    CHECK(param->framePacking != -1 && (param->framePacking < 3 || param->framePacking > 5),
+          "Frame packing arrangement type must be 3 (side by side), 4 (top and bottom) or 5 (temporal interleaving)");
+    CHECK(param->framePacking != -1 && param->numViews > 1,
+          "Frame packing arrangement SEI cannot be used with multi-view encoding, each layer is a full view");
     CHECK(param->confWinRightOffset < 0, "Conformance Window Right Offset must be 0 or greater");
     CHECK(param->confWinBottomOffset < 0, "Conformance Window Bottom Offset must be 0 or greater");
     CHECK(param->decoderVbvMaxRate < 0, "Invalid Decoder Vbv Maxrate. Value can not be less than zero");
@@ -2391,7 +2393,7 @@ void x265_print_params(x265_param* param)
     TOOLOPT(param->numViews > 1, "multi-view");
 #endif
 #if ENABLE_HDR10_PLUS
-    TOOLOPT(param->toneMapFile != NULL, "dhdr10-info");
+    TOOLOPT(strlen(param->toneMapFile), "dhdr10-info");
 #endif
     if(param->bEnableTemporalFilter)
     {
@@ -2643,6 +2645,8 @@ char *x265_param2string(x265_param* p, int padx, int pady)
     BOOL(p->bHDR10Opt, "hdr10-opt");
     BOOL(p->bDhdr10opt, "dhdr10-opt");
     BOOL(p->bEmitIDRRecoverySEI, "idr-recovery-sei");
+    if (p->framePacking > -1)
+        s += snprintf(s, bufSize - (s - buf), " frame-packing=%d", p->framePacking);
     if (strlen(p->analysisSave))
         s += snprintf(s, bufSize - (s - buf), " analysis-save");
     if (strlen(p->analysisLoad))
@@ -3038,6 +3042,7 @@ void x265_copy_params(x265_param* dst, x265_param* src)
     dst->cbQpOffset = src->cbQpOffset;
     dst->crQpOffset = src->crQpOffset;
     dst->preferredTransferCharacteristics = src->preferredTransferCharacteristics;
+    dst->framePacking = src->framePacking;
     dst->pictureStructure = src->pictureStructure;
 
     dst->rc.rateControlMode = src->rc.rateControlMode;
